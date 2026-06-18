@@ -1,0 +1,21 @@
+# attentive-mobile repos with PRs authored by ixtli (discovered via GitHub search).
+# Used by: ./contrib.py sync --repos @repos.txt --since 2026-01-01
+attentive-mobile/code
+attentive-mobile/a1ec
+attentive-mobile/a1ec-cli
+attentive-mobile/a1ec-frontend
+attentive-mobile/terraform
+attentive-mobile/gradle-plugins
+attentive-mobile/knock
+attentive-mobile/gradle-cortex-extractor
+attentive-mobile/a1ee-terraform
+attentive-mobile/cli
+attentive-mobile/butler
+attentive-mobile/markdoxide
+attentive-mobile/a1e-docker-images
+attentive-mobile/config
+attentive-mobile/llm-wrapper-experiment
+attentive-mobile/ci_secrets_keeper
+attentive-mobile/career-ladder
+attentive-mobile/a1e-envs
+attentive-mobile/pontifex

@@ -1,5 +1,10 @@
-# Generated dataset + exports — regenerate with `contrib.py sync` / `export`
-*.db
+# Generated exports — regenerate with `contrib.py export`
 *.db-journal
 *.db-wal
 out/
+sync.log
+
+# The canonical dataset IS committed (it powers the Netlify build); ignore any
+# other stray *.db files but keep contrib.db tracked.
+*.db
+!contrib.db

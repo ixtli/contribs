@@ -1,7 +1,11 @@
-# Generated dataset + exports (regenerate with tools/contrib-dataset)
-*.db
+# The dataset (tools/contrib-dataset/contrib.db) IS committed — it powers the
+# Netlify build — so it is intentionally NOT ignored here.
+
+# Transient SQLite sidecar files
 *.db-journal
 *.db-wal
+
+# Regenerable exports / logs
 out/
 sync.log
 
