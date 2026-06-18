@@ -191,7 +191,6 @@ async function main() {
       (SELECT COALESCE(SUM(additions),0) FROM prs)                 AS total_additions,
       (SELECT COALESCE(SUM(deletions),0) FROM prs)                 AS total_deletions,
       (SELECT COUNT(*) FROM comments WHERE direction='given')      AS given,
-      (SELECT COUNT(*) FROM comments WHERE direction='received')   AS received,
       (SELECT MIN(created_at) FROM prs)                            AS project_start,
       (SELECT MAX(COALESCE(merged_at,closed_at)) FROM prs)         AS last_activity
   `)[0] || {};
@@ -212,8 +211,13 @@ async function main() {
   document.getElementById('kAdded').textContent = '+' + fmt(ov.total_additions);
   document.getElementById('kAddedSub').textContent =
     `${fmt(ov.total_deletions)} deleted · ${fmt((ov.total_additions||0)+(ov.total_deletions||0))} total churn`;
+  const kinds = Object.fromEntries(q(`
+    SELECT kind, COUNT(*) AS cnt FROM comments WHERE direction='given' GROUP BY kind
+  `).map(r => [r.kind, r.cnt]));
+  const nReviews = kinds.review || 0;
+  const nComments = (kinds.review_comment || 0) + (kinds.issue_comment || 0);
   document.getElementById('kComments').textContent = fmt(ov.given);
-  document.getElementById('kCommentsSub').textContent = `${fmt(ov.received)} received from others`;
+  document.getElementById('kCommentsSub').textContent = `${fmt(nReviews)} reviews · ${fmt(nComments)} comments`;
   document.getElementById('kVel').textContent = fmt(vel.avg_prs_per_week);
   document.getElementById('kVelSub').textContent =
     `PRs/week · ${fmt(vel.avg_additions_per_week)} lines added/week`;
