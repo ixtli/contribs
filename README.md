@@ -3,6 +3,11 @@
 A visualization of my GitHub contributions across the **attentive-mobile**
 repositories, deployed as a static site on **GitHub Pages**.
 
+**Live:** https://ixtli.github.io/contribs/ *(active once Pages is enabled; see below)*
+
+See [`CLAUDE.md`](CLAUDE.md) for the development guide (architecture, workflows, and
+design constraints) when resuming work.
+
 The dashboard is a single-page app that loads **SQLite in the browser via WASM**
 ([sql.js](https://sql.js.org/)) and queries the committed dataset directly —
 no build step, no server, no API token at view time. The data is collected by the
