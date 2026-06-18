@@ -166,14 +166,21 @@ const short = repo => String(repo).split('/').pop();
 // ─────────────────────────────────────────────────────────────────────────────
 // Load SQLite (WASM), fetch the committed DB, and query it client-side.
 // The same aggregate SQL that analyze.py runs offline — here it runs live.
+//
+// The DB URL carries a content hash (?v=…) injected at deploy time. The browser
+// refetches contrib.db only when its bytes change (the hash, hence the URL,
+// changes); an unchanged DB is served straight from cache. Locally the literal
+// placeholder is harmless — the dev server ignores the query string.
 // ─────────────────────────────────────────────────────────────────────────────
+const DB_URL = './contrib.db?v=__DB_VERSION__';
+
 async function main() {
   const status = document.getElementById('status');
   let SQL, buf;
   try {
     [SQL, buf] = await Promise.all([
       initSqlJs({ locateFile: f => `https://cdn.jsdelivr.net/npm/sql.js@1.11.0/dist/${f}` }),
-      fetch('./contrib.db').then(r => {
+      fetch(DB_URL).then(r => {
         if (!r.ok) throw new Error(`contrib.db → HTTP ${r.status}`);
         return r.arrayBuffer();
       }),
@@ -261,7 +268,8 @@ async function main() {
   // ── comments given per month ────────────────────────────────────────────────
   const cm = q(`
     SELECT strftime('%Y-%m', created_at) AS month, COUNT(*) AS comments_given
-    FROM comments WHERE direction='given' GROUP BY 1 ORDER BY 1
+    FROM comments WHERE direction='given' AND created_at IS NOT NULL
+    GROUP BY 1 ORDER BY 1
   `);
   bar('cComments', cm.map(r => r.month),
     [{ label: 'Comments given', data: cm.map(r => r.comments_given), backgroundColor: '#a78bfa', borderRadius: 3 }]);

@@ -127,7 +127,7 @@ def comment_activity(conn: sqlite3.Connection) -> dict[str, Any]:
     by_month = _rows(conn, """
         SELECT strftime('%Y-%m', created_at) AS month,
                COUNT(*) AS comments_given
-        FROM comments WHERE direction='given'
+        FROM comments WHERE direction='given' AND created_at IS NOT NULL
         GROUP BY 1 ORDER BY 1
     """)
     review_decisions = _rows(conn, """
