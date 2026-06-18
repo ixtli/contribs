@@ -37,8 +37,14 @@ jobs:
       - name: Assemble site (SPA + dataset)
         run: |
           mkdir -p _site
-          cp public/index.html _site/index.html
           cp tools/contrib-dataset/contrib.db _site/contrib.db
+          # Content hash → cache-busting version. The SPA fetches contrib.db?v=<hash>,
+          # so browsers refetch the DB only when its bytes change; otherwise the
+          # cached copy is reused. (Pages can't set custom headers, but it does send
+          # ETag/Last-Modified, so unchanged requests still come back 304.)
+          ver=$(sha256sum _site/contrib.db | cut -c1-12)
+          sed "s/__DB_VERSION__/$ver/g" public/index.html > _site/index.html
+          echo "DB version: $ver"
           ls -la _site
 
       - uses: actions/configure-pages@v5
