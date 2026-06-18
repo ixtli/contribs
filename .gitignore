@@ -1,0 +1,22 @@
+# The dataset (tools/contrib-dataset/contrib.db) IS committed — the dashboard
+# loads it in the browser via WASM — so it is intentionally NOT ignored here.
+
+# Transient SQLite sidecar files
+*.db-journal
+*.db-wal
+
+# Local-preview copy of the DB next to the SPA (the canonical one lives in
+# tools/contrib-dataset/; CI copies it into the published site).
+/public/contrib.db
+
+# Regenerable exports / logs
+out/
+sync.log
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Never commit credentials
+*.token
+.env
