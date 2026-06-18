@@ -77,6 +77,7 @@
     <div class="chart-card"><h2>PRs by Repo</h2><canvas id="cRepos"></canvas></div>
     <div class="chart-card"><h2>PR Size Distribution</h2><canvas id="cSizes"></canvas></div>
     <div class="chart-card"><h2>Cumulative Merged PRs</h2><canvas id="cCumulative"></canvas></div>
+    <div class="chart-card"><h2>Activity by Day of Week (your local time)</h2><canvas id="cDow"></canvas></div>
   </div>
 
   <!-- Tables -->
@@ -191,7 +192,6 @@ async function main() {
       (SELECT COALESCE(SUM(additions),0) FROM prs)                 AS total_additions,
       (SELECT COALESCE(SUM(deletions),0) FROM prs)                 AS total_deletions,
       (SELECT COUNT(*) FROM comments WHERE direction='given')      AS given,
-      (SELECT COUNT(*) FROM comments WHERE direction='received')   AS received,
       (SELECT MIN(created_at) FROM prs)                            AS project_start,
       (SELECT MAX(COALESCE(merged_at,closed_at)) FROM prs)         AS last_activity
   `)[0] || {};
@@ -212,8 +212,13 @@ async function main() {
   document.getElementById('kAdded').textContent = '+' + fmt(ov.total_additions);
   document.getElementById('kAddedSub').textContent =
     `${fmt(ov.total_deletions)} deleted · ${fmt((ov.total_additions||0)+(ov.total_deletions||0))} total churn`;
+  const kinds = Object.fromEntries(q(`
+    SELECT kind, COUNT(*) AS cnt FROM comments WHERE direction='given' GROUP BY kind
+  `).map(r => [r.kind, r.cnt]));
+  const nReviews = kinds.review || 0;
+  const nComments = (kinds.review_comment || 0) + (kinds.issue_comment || 0);
   document.getElementById('kComments').textContent = fmt(ov.given);
-  document.getElementById('kCommentsSub').textContent = `${fmt(ov.received)} received from others`;
+  document.getElementById('kCommentsSub').textContent = `${fmt(nReviews)} reviews · ${fmt(nComments)} comments`;
   document.getElementById('kVel').textContent = fmt(vel.avg_prs_per_week);
   document.getElementById('kVelSub').textContent =
     `PRs/week · ${fmt(vel.avg_additions_per_week)} lines added/week`;
@@ -251,6 +256,23 @@ async function main() {
   bar('cComments', cm.map(r => r.month),
     [{ label: 'Comments given', data: cm.map(r => r.comments_given), backgroundColor: '#a78bfa', borderRadius: 3 }]);
 
+  // ── activity by day of week ─────────────────────────────────────────────────
+  // Bucket the raw UTC timestamps in the viewer's local timezone, so the weekday
+  // reflects when work actually happened locally (late-night work won't shift days).
+  const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const DOW_ORDER = [1,2,3,4,5,6,0]; // display Mon → Sun
+  const bucketDow = rows => {
+    const c = [0,0,0,0,0,0,0];
+    rows.forEach(r => { const d = new Date(r.created_at); if (!isNaN(d)) c[d.getDay()]++; });
+    return c;
+  };
+  const prDow = bucketDow(q(`SELECT created_at FROM prs WHERE created_at IS NOT NULL`));
+  const cmDow = bucketDow(q(`SELECT created_at FROM comments WHERE direction='given' AND created_at IS NOT NULL`));
+  bar('cDow', DOW_ORDER.map(i => DOW[i]), [
+    { label: 'PRs opened',             data: DOW_ORDER.map(i => prDow[i]), backgroundColor: '#3b82f6', borderRadius: 3 },
+    { label: 'Comments/reviews given', data: DOW_ORDER.map(i => cmDow[i]), backgroundColor: '#a78bfa', borderRadius: 3 },
+  ]);
+
   // ── PRs by repo ─────────────────────────────────────────────────────────────
   const repoColors = ['#3b82f6','#06b6d4','#8b5cf6','#f59e0b','#10b981','#f43f5e','#64748b','#e879f9'];
   const pr = q(`
@@ -284,7 +306,7 @@ async function main() {
     SELECT repo, number, additions+deletions AS churn, strftime('%Y-%m-%d', merged_at) AS merged
     FROM prs WHERE merged=1 AND additions IS NOT NULL ORDER BY churn DESC LIMIT 10
   `);
-  table('tTopPRs', ['Repo','#','Churn','Merged'],
+  table('tTopPRs', ['Repo','PR #','Churn','Merged'],
     top.map(r => ({ repo: short(r.repo), '#': r.number, churn: r.churn, merged: r.merged })), [1,2]);
 
   const cyc = q(`

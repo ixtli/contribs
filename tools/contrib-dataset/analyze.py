@@ -535,7 +535,7 @@ table('tRepos',
   [1,2,3,4]
 );
 table('tTopPRs',
-  ['Repo','#','Churn','Merged'],
+  ['Repo','PR #','Churn','Merged'],
   DATA.top_prs.map(r => ({
     repo: r.repo.split('/').pop(), '#': r.number,
     churn: r.churn, merged: r.merged

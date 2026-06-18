@@ -59,15 +59,28 @@ from collections import defaultdict
 
 API = "https://api.github.com"
 
-# Default a1e repo set (the super-repo + its sub-repos). Override with --repos.
+# Default repo set: every attentive-mobile repo where ixtli has authored a PR
+# (kept in sync with repos.txt, which is the canonical list). Override with
+# --repos, or --repos @repos.txt to read the list from the file.
 DEFAULT_REPOS = [
-    "attentive-mobile/a1e-envs",
+    "attentive-mobile/code",
     "attentive-mobile/a1ec",
     "attentive-mobile/a1ec-cli",
     "attentive-mobile/a1ec-frontend",
+    "attentive-mobile/terraform",
+    "attentive-mobile/gradle-plugins",
+    "attentive-mobile/knock",
+    "attentive-mobile/gradle-cortex-extractor",
     "attentive-mobile/a1ee-terraform",
-    "attentive-mobile/a1e-docker-images",
+    "attentive-mobile/cli",
     "attentive-mobile/butler",
+    "attentive-mobile/markdoxide",
+    "attentive-mobile/a1e-docker-images",
+    "attentive-mobile/config",
+    "attentive-mobile/llm-wrapper-experiment",
+    "attentive-mobile/ci_secrets_keeper",
+    "attentive-mobile/career-ladder",
+    "attentive-mobile/a1e-envs",
     "attentive-mobile/pontifex",
 ]
 DEFAULT_AUTHORS = ["ixtli"]
