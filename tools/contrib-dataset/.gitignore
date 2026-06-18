@@ -1,0 +1,5 @@
+# Generated dataset + exports — regenerate with `contrib.py sync` / `export`
+*.db
+*.db-journal
+*.db-wal
+out/

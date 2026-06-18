@@ -1,0 +1,10 @@
+# Generated dataset + exports (regenerate with tools/contrib-dataset)
+*.db
+*.db-journal
+*.db-wal
+out/
+sync.log
+
+# Never commit credentials
+*.token
+.env
