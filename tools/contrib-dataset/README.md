@@ -27,6 +27,11 @@ code repo just as well.
 | `repos` | per-repo reachability | so an inaccessible repo is recorded, not silently dropped |
 | `sync_state` | incremental cursors | `(repo, resource) → last_since` |
 
+**Metadata only — no free text.** This dataset records *how much* and *when*,
+not *what was said or worked on*: PR titles, comment/review bodies, and changed
+file paths are deliberately **not** stored. Each row keeps repo, PR number,
+counts, timestamps, line stats, and review decisions (APPROVED/CHANGES_REQUESTED).
+
 "Comments given" are collected **repo-wide** (every issue/PR comment and review
 authored by you, on anyone's PR) — that is the primary signal of feedback you
 provide as a reviewer. `--include-received` additionally pulls comments **others**

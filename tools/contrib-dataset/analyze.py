@@ -199,14 +199,14 @@ def velocity(conn: sqlite3.Connection) -> dict[str, Any]:
 
 def top_prs(conn: sqlite3.Connection, n: int = 10) -> list[dict]:
     rows = _rows(conn, """
-        SELECT repo, number, title,
+        SELECT repo, number,
                additions+deletions AS churn,
                strftime('%Y-%m-%d', merged_at) AS merged
         FROM prs
         WHERE merged=1 AND additions IS NOT NULL
         ORDER BY churn DESC LIMIT ?
     """, (n,))
-    _print_table(f"Top {n} PRs by Churn", rows, ["repo","number","churn","merged","title"])
+    _print_table(f"Top {n} PRs by Churn", rows, ["repo","number","churn","merged"])
     return [dict(r) for r in rows]
 
 
@@ -535,10 +535,10 @@ table('tRepos',
   [1,2,3,4]
 );
 table('tTopPRs',
-  ['Repo','#','Churn','Merged','Title'],
+  ['Repo','#','Churn','Merged'],
   DATA.top_prs.map(r => ({
     repo: r.repo.split('/').pop(), '#': r.number,
-    churn: r.churn, merged: r.merged, title: (r.title || '').slice(0, 60)
+    churn: r.churn, merged: r.merged
   })),
   [1,2]
 );

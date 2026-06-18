@@ -4,7 +4,7 @@
 Captures, per repo and per author:
   * pull requests authored (state, merged, timestamps, line stats, change size)
   * comments authored (issue comments + PR review comments) — the feedback you GIVE
-  * reviews submitted (APPROVED / CHANGES_REQUESTED / COMMENTED, with body)
+  * reviews submitted (APPROVED / CHANGES_REQUESTED / COMMENTED — decision only)
   * optionally, comments RECEIVED on your PRs (feedback others give you)
 
 Design goals
@@ -245,13 +245,15 @@ CREATE TABLE IF NOT EXISTS repos (
   last_checked TEXT
 );
 CREATE TABLE IF NOT EXISTS prs (
-  repo TEXT, number INTEGER, title TEXT, state TEXT, draft INTEGER,
+  repo TEXT, number INTEGER, state TEXT, draft INTEGER,
   merged INTEGER, author TEXT, created_at TEXT, updated_at TEXT,
   merged_at TEXT, closed_at TEXT,
   additions INTEGER, deletions INTEGER, changed_files INTEGER,
   comments INTEGER, review_comments INTEGER, url TEXT,
   PRIMARY KEY (repo, number)
 );
+-- Behavioral metadata only: no titles, comment/review bodies, or file paths
+-- are recorded — just how much, when, and what kind of activity.
 CREATE TABLE IF NOT EXISTS comments (
   kind TEXT,            -- issue_comment | review_comment | review
   id INTEGER,           -- GitHub comment/review id
@@ -259,8 +261,8 @@ CREATE TABLE IF NOT EXISTS comments (
   author TEXT,          -- comment author
   target_author TEXT,   -- author of the PR the comment is on (if known)
   direction TEXT,       -- given | received
-  body TEXT, state TEXT,-- state used for reviews (APPROVED/...)
-  path TEXT, in_reply_to INTEGER,
+  state TEXT,           -- state used for reviews (APPROVED/...)
+  in_reply_to INTEGER,
   created_at TEXT, updated_at TEXT, url TEXT,
   PRIMARY KEY (kind, id)
 );
@@ -366,7 +368,7 @@ def _sync_prs(gh, conn, repo, owner, name, authors, args):
         for hit in gh.search_issues(q):
             number = hit["number"]
             row = {
-                "repo": repo, "number": number, "title": hit["title"],
+                "repo": repo, "number": number,
                 "state": hit["state"], "draft": int(hit.get("draft", False)),
                 "merged": int(bool((hit.get("pull_request") or {}).get("merged_at"))),
                 "author": hit["user"]["login"],
@@ -412,15 +414,15 @@ def _sync_comments(gh, conn, repo, owner, name, authors, args):
                 if not is_pr_comment(c):
                     continue
                 num = pr_number_from_url(c.get("html_url", "").split("#")[0])
-                path, reply = None, None
+                reply = None
             else:
                 num = pr_number_from_url(c.get("pull_request_url", ""))
-                path, reply = c.get("path"), c.get("in_reply_to_id")
+                reply = c.get("in_reply_to_id")
             upsert(conn, "comments", {
                 "kind": kind, "id": c["id"], "repo": repo, "pr_number": num,
                 "author": c["user"]["login"], "target_author": None,
-                "direction": "given", "body": c.get("body"), "state": None,
-                "path": path, "in_reply_to": reply,
+                "direction": "given", "state": None,
+                "in_reply_to": reply,
                 "created_at": c.get("created_at"), "updated_at": c.get("updated_at"),
                 "url": c.get("html_url"),
             }, ["kind", "id"])
@@ -450,8 +452,7 @@ def _sync_received(gh, conn, repo, authors, args):
                             "kind": kind, "id": c["id"], "repo": repo,
                             "pr_number": num, "author": c["user"]["login"],
                             "target_author": hit["user"]["login"],
-                            "direction": "received", "body": c.get("body"),
-                            "state": None, "path": c.get("path"),
+                            "direction": "received", "state": None,
                             "in_reply_to": c.get("in_reply_to_id"),
                             "created_at": c.get("created_at"),
                             "updated_at": c.get("updated_at"),
@@ -479,8 +480,8 @@ def _sync_reviews(gh, conn, repo, authors, args):
                         "kind": "review", "id": r["id"], "repo": repo,
                         "pr_number": num, "author": r["user"]["login"],
                         "target_author": hit["user"]["login"], "direction": "given",
-                        "body": r.get("body"), "state": r.get("state"),
-                        "path": None, "in_reply_to": None,
+                        "state": r.get("state"),
+                        "in_reply_to": None,
                         "created_at": r.get("submitted_at"),
                         "updated_at": r.get("submitted_at"),
                         "url": r.get("html_url"),

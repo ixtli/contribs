@@ -192,7 +192,6 @@ FROM (
 SELECT
     repo,
     number,
-    title,
     additions,
     deletions,
     additions + deletions               AS churn,
@@ -208,7 +207,6 @@ LIMIT 20;
 SELECT
     repo,
     number,
-    title,
     comments                            AS pr_comments,
     review_comments,
     comments + review_comments          AS total_discussion,
