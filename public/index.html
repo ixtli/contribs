@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contribution Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sql.js@1.11.0/dist/sql-wasm.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; background: #0f1117; color: #e2e8f0;
+         padding: 1.5rem; }
+  h1  { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.25rem; }
+  .subtitle { color: #94a3b8; font-size: 0.85rem; margin-bottom: 2rem; }
+  .grid { display: grid; gap: 1.25rem;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .card { background: #1e2330; border-radius: 10px; padding: 1.25rem; }
+  .card h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: .06em;
+             color: #64748b; margin-bottom: 0.75rem; }
+  .stat-big { font-size: 2.4rem; font-weight: 700; line-height: 1; }
+  .stat-sub { font-size: 0.8rem; color: #94a3b8; margin-top: 0.2rem; }
+  .chart-card { background: #1e2330; border-radius: 10px; padding: 1.25rem; }
+  .chart-card h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: .06em;
+                   color: #64748b; margin-bottom: 0.75rem; }
+  .charts { display: grid; gap: 1.25rem;
+            grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
+            margin-top: 1.25rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 1.25rem; }
+  th { text-align: left; color: #64748b; padding: 0.35rem 0.5rem;
+       border-bottom: 1px solid #2d3748; font-weight: 500; }
+  td { padding: 0.35rem 0.5rem; border-bottom: 1px solid #1a2032; }
+  tr:last-child td { border-bottom: none; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  canvas { max-height: 260px; }
+  #status { color: #94a3b8; font-size: 0.9rem; padding: 2rem 0; }
+  #status.err { color: #f87171; }
+  #app { display: none; }
+  code { background: #0b0e14; padding: .1rem .35rem; border-radius: 4px; color: #cbd5e1; }
+</style>
+</head>
+<body>
+<h1>Contribution Dashboard</h1>
+<p class="subtitle" id="sub">Querying <code>contrib.db</code> live in your browser…</p>
+
+<div id="status">Loading SQLite (WASM) and the dataset…</div>
+
+<div id="app">
+  <!-- KPI row -->
+  <div class="grid">
+    <div class="card">
+      <h2>Merged PRs</h2>
+      <div class="stat-big" id="kMerged">—</div>
+      <div class="stat-sub" id="kMergedSub"></div>
+    </div>
+    <div class="card">
+      <h2>Lines Added</h2>
+      <div class="stat-big" style="color:#4ade80" id="kAdded">—</div>
+      <div class="stat-sub" id="kAddedSub"></div>
+    </div>
+    <div class="card">
+      <h2>Comments Given</h2>
+      <div class="stat-big" style="color:#a78bfa" id="kComments">—</div>
+      <div class="stat-sub" id="kCommentsSub"></div>
+    </div>
+    <div class="card">
+      <h2>Weekly Velocity</h2>
+      <div class="stat-big" id="kVel">—</div>
+      <div class="stat-sub" id="kVelSub"></div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts">
+    <div class="chart-card"><h2>Merged PRs per Month</h2><canvas id="cPRs"></canvas></div>
+    <div class="chart-card"><h2>Line Churn per Month</h2><canvas id="cChurn"></canvas></div>
+    <div class="chart-card"><h2>Comments Given per Month</h2><canvas id="cComments"></canvas></div>
+    <div class="chart-card"><h2>PRs by Repo</h2><canvas id="cRepos"></canvas></div>
+    <div class="chart-card"><h2>PR Size Distribution</h2><canvas id="cSizes"></canvas></div>
+    <div class="chart-card"><h2>Cumulative Merged PRs</h2><canvas id="cCumulative"></canvas></div>
+  </div>
+
+  <!-- Tables -->
+  <div class="charts">
+    <div class="chart-card"><h2>Per-Repo Breakdown</h2><table id="tRepos"></table></div>
+    <div class="chart-card"><h2>Top PRs by Churn</h2><table id="tTopPRs"></table></div>
+    <div class="chart-card"><h2>Cycle Time (days open before merge)</h2><table id="tCycle"></table></div>
+    <div class="chart-card"><h2>Review Decisions Submitted</h2><table id="tReviews"></table></div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// Chart.js theming + helpers (shared look with the CLI-generated dashboard)
+// ─────────────────────────────────────────────────────────────────────────────
+const FONT = { color: '#94a3b8', family: 'system-ui, sans-serif', size: 11 };
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = '#2d3748';
+
+function bar(id, labels, datasets, opts = {}) {
+  new Chart(document.getElementById(id), {
+    type: 'bar', data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: { legend: { labels: { font: FONT } } },
+      scales: {
+        x: { ticks: { font: FONT, maxRotation: 45 }, grid: { color: '#2d3748' } },
+        y: { ticks: { font: FONT, callback: v => v.toLocaleString() },
+             grid: { color: '#2d3748' }, ...(opts.yOpts || {}) },
+      },
+      ...(opts.extra || {}),
+    },
+  });
+}
+function doughnut(id, labels, data, colors) {
+  new Chart(document.getElementById(id), {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 1, borderColor: '#1e2330' }] },
+    options: { responsive: true, maintainAspectRatio: true,
+      plugins: { legend: { position: 'right', labels: { font: FONT, boxWidth: 12 } } } },
+  });
+}
+function line(id, labels, datasets) {
+  new Chart(document.getElementById(id), {
+    type: 'line', data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: true,
+      plugins: { legend: { labels: { font: FONT } } },
+      scales: {
+        x: { ticks: { font: FONT, maxRotation: 45 }, grid: { color: '#2d3748' } },
+        y: { ticks: { font: FONT, callback: v => v.toLocaleString() }, grid: { color: '#2d3748' } },
+      },
+    },
+  });
+}
+function table(id, cols, rows, numCols = []) {
+  const el = document.getElementById(id);
+  el.innerHTML = '<thead><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead>';
+  const body = document.createElement('tbody');
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    cols.forEach((c, i) => {
+      const td = document.createElement('td');
+      const val = r[c.toLowerCase().replace(/ /g, '_')] ?? r[Object.keys(r)[i]] ?? '';
+      td.textContent = typeof val === 'number' ? val.toLocaleString() : val;
+      if (numCols.includes(i)) td.className = 'num';
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+  el.appendChild(body);
+}
+const fmt = n => (n === null || n === undefined) ? '—' : Number(n).toLocaleString();
+const short = repo => String(repo).split('/').pop();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Load SQLite (WASM), fetch the committed DB, and query it client-side.
+// The same aggregate SQL that analyze.py runs offline — here it runs live.
+// ─────────────────────────────────────────────────────────────────────────────
+async function main() {
+  const status = document.getElementById('status');
+  let SQL, buf;
+  try {
+    [SQL, buf] = await Promise.all([
+      initSqlJs({ locateFile: f => `https://cdn.jsdelivr.net/npm/sql.js@1.11.0/dist/${f}` }),
+      fetch('./contrib.db').then(r => {
+        if (!r.ok) throw new Error(`contrib.db → HTTP ${r.status}`);
+        return r.arrayBuffer();
+      }),
+    ]);
+  } catch (e) {
+    status.className = 'err';
+    status.textContent = `Could not load the dataset: ${e.message}. ` +
+      `Make sure contrib.db sits next to this page.`;
+    return;
+  }
+
+  const db = new SQL.Database(new Uint8Array(buf));
+  const q = sql => {
+    const res = db.exec(sql);
+    if (!res.length) return [];
+    const { columns, values } = res[0];
+    return values.map(row => Object.fromEntries(row.map((v, i) => [columns[i], v])));
+  };
+
+  // ── overview / KPIs ──────────────────────────────────────────────────────
+  const ov = q(`
+    SELECT
+      (SELECT COUNT(*) FROM prs)                                   AS total_prs,
+      (SELECT COUNT(*) FROM prs WHERE merged=1)                    AS merged_prs,
+      (SELECT COUNT(*) FROM prs WHERE state='open')                AS open_prs,
+      (SELECT COALESCE(SUM(additions),0) FROM prs)                 AS total_additions,
+      (SELECT COALESCE(SUM(deletions),0) FROM prs)                 AS total_deletions,
+      (SELECT COUNT(*) FROM comments WHERE direction='given')      AS given,
+      (SELECT COUNT(*) FROM comments WHERE direction='received')   AS received,
+      (SELECT MIN(created_at) FROM prs)                            AS project_start,
+      (SELECT MAX(COALESCE(merged_at,closed_at)) FROM prs)         AS last_activity
+  `)[0] || {};
+
+  const vel = q(`
+    WITH weeks AS (
+      SELECT CAST(julianday(merged_at) - julianday(MIN(merged_at) OVER ()) AS INTEGER)/7+1 AS wk,
+             additions, deletions
+      FROM prs WHERE merged=1 AND merged_at IS NOT NULL
+    )
+    SELECT ROUND(AVG(c),1) AS avg_prs_per_week, ROUND(AVG(a),0) AS avg_additions_per_week
+    FROM (SELECT wk, COUNT(*) c, COALESCE(SUM(additions),0) a FROM weeks GROUP BY wk)
+  `)[0] || {};
+
+  document.getElementById('kMerged').textContent = fmt(ov.merged_prs);
+  document.getElementById('kMergedSub').textContent =
+    `of ${fmt(ov.total_prs)} total · ${fmt(ov.open_prs)} open`;
+  document.getElementById('kAdded').textContent = '+' + fmt(ov.total_additions);
+  document.getElementById('kAddedSub').textContent =
+    `${fmt(ov.total_deletions)} deleted · ${fmt((ov.total_additions||0)+(ov.total_deletions||0))} total churn`;
+  document.getElementById('kComments').textContent = fmt(ov.given);
+  document.getElementById('kCommentsSub').textContent = `${fmt(ov.received)} received from others`;
+  document.getElementById('kVel').textContent = fmt(vel.avg_prs_per_week);
+  document.getElementById('kVelSub').textContent =
+    `PRs/week · ${fmt(vel.avg_additions_per_week)} lines added/week`;
+
+  const period = `${(ov.project_start||'?').slice(0,10)} → ${(ov.last_activity||'?').slice(0,10)}`;
+  document.getElementById('sub').innerHTML =
+    `Period: <strong>${period}</strong> &nbsp;·&nbsp; queried live from ` +
+    `<code>contrib.db</code> in your browser (SQLite/WASM)`;
+
+  // ── monthly PRs / churn / cumulative ───────────────────────────────────────
+  const mp = q(`
+    SELECT strftime('%Y-%m', merged_at) AS month, COUNT(*) AS prs,
+           COALESCE(SUM(additions),0) AS added, COALESCE(SUM(deletions),0) AS deleted
+    FROM prs WHERE merged=1 AND merged_at IS NOT NULL GROUP BY 1 ORDER BY 1
+  `);
+  bar('cPRs', mp.map(r => r.month),
+    [{ label: 'Merged PRs', data: mp.map(r => r.prs), backgroundColor: '#3b82f6', borderRadius: 3 }]);
+  bar('cChurn', mp.map(r => r.month), [
+      { label: 'Added',   data: mp.map(r => r.added),   backgroundColor: '#4ade80', borderRadius: 3 },
+      { label: 'Deleted', data: mp.map(r => r.deleted), backgroundColor: '#f87171', borderRadius: 3 },
+    ],
+    { extra: { scales: { x: { stacked: true }, y: { stacked: true,
+        ticks: { font: FONT, callback: v => v.toLocaleString() }, grid: { color: '#2d3748' } } } } });
+  let cum = 0;
+  line('cCumulative', mp.map(r => r.month),
+    [{ label: 'Cumulative merged PRs', data: mp.map(r => { cum += r.prs; return cum; }),
+       borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.12)',
+       fill: true, tension: 0.3, pointRadius: 3 }]);
+
+  // ── comments given per month ────────────────────────────────────────────────
+  const cm = q(`
+    SELECT strftime('%Y-%m', created_at) AS month, COUNT(*) AS comments_given
+    FROM comments WHERE direction='given' GROUP BY 1 ORDER BY 1
+  `);
+  bar('cComments', cm.map(r => r.month),
+    [{ label: 'Comments given', data: cm.map(r => r.comments_given), backgroundColor: '#a78bfa', borderRadius: 3 }]);
+
+  // ── PRs by repo ─────────────────────────────────────────────────────────────
+  const repoColors = ['#3b82f6','#06b6d4','#8b5cf6','#f59e0b','#10b981','#f43f5e','#64748b','#e879f9'];
+  const pr = q(`
+    SELECT repo, COUNT(*) AS prs, SUM(merged) AS merged,
+           COALESCE(SUM(additions),0) AS added, COALESCE(SUM(deletions),0) AS deleted
+    FROM prs GROUP BY repo ORDER BY merged DESC
+  `);
+  bar('cRepos', pr.map(r => short(r.repo)),
+    [{ label: 'Merged', data: pr.map(r => r.merged),
+       backgroundColor: pr.map((_, i) => repoColors[i % repoColors.length]), borderRadius: 3 }]);
+
+  // ── PR size distribution ────────────────────────────────────────────────────
+  const sd = q(`
+    SELECT CASE
+        WHEN additions+deletions <=   50 THEN 'XS (<=50)'
+        WHEN additions+deletions <=  200 THEN 'S (<=200)'
+        WHEN additions+deletions <=  500 THEN 'M (<=500)'
+        WHEN additions+deletions <= 2000 THEN 'L (<=2000)'
+        ELSE 'XL (>2000)' END AS bucket,
+      COUNT(*) AS prs
+    FROM prs WHERE merged=1 AND additions IS NOT NULL GROUP BY 1 ORDER BY 1
+  `);
+  doughnut('cSizes', sd.map(r => r.bucket), sd.map(r => r.prs),
+    ['#3b82f6','#06b6d4','#8b5cf6','#f59e0b','#f43f5e']);
+
+  // ── tables ──────────────────────────────────────────────────────────────────
+  table('tRepos', ['Repo','PRs','Merged','Added','Deleted'],
+    pr.map(r => ({ ...r, repo: short(r.repo) })), [1,2,3,4]);
+
+  const top = q(`
+    SELECT repo, number, additions+deletions AS churn, strftime('%Y-%m-%d', merged_at) AS merged
+    FROM prs WHERE merged=1 AND additions IS NOT NULL ORDER BY churn DESC LIMIT 10
+  `);
+  table('tTopPRs', ['Repo','#','Churn','Merged'],
+    top.map(r => ({ repo: short(r.repo), '#': r.number, churn: r.churn, merged: r.merged })), [1,2]);
+
+  const cyc = q(`
+    SELECT repo, COUNT(*) AS prs,
+           ROUND(AVG(julianday(merged_at)-julianday(created_at)),1) AS avg_days,
+           ROUND(MIN(julianday(merged_at)-julianday(created_at)),1) AS min_days,
+           ROUND(MAX(julianday(merged_at)-julianday(created_at)),1) AS max_days
+    FROM prs WHERE merged=1 AND merged_at IS NOT NULL AND created_at IS NOT NULL
+    GROUP BY repo ORDER BY avg_days
+  `);
+  table('tCycle', ['Repo','PRs','Avg days','Min','Max'],
+    cyc.map(r => ({ ...r, repo: short(r.repo) })), [1,2,3,4]);
+
+  const rd = q(`
+    SELECT state, COUNT(*) AS cnt FROM comments
+    WHERE kind='review' AND direction='given' AND state IS NOT NULL
+    GROUP BY state ORDER BY cnt DESC
+  `);
+  table('tReviews', ['Decision','Count'], rd.map(r => ({ decision: r.state, count: r.cnt })), [1]);
+
+  // reveal
+  status.style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+}
+main();
+</script>
+</body>
+</html>
