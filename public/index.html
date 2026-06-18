@@ -28,10 +28,13 @@
   .charts { display: grid; gap: 1.25rem;
             grid-template-columns: repeat(auto-fill, minmax(min(460px, 100%), 1fr));
             margin-top: 1.25rem; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 1.25rem; }
-  th { text-align: left; color: #64748b; padding: 0.35rem 0.5rem;
+  /* Scroll wrapper: keeps wide tables inside the card instead of bleeding into
+     the right padding; the table scrolls horizontally within its own box. */
+  .tw { overflow-x: auto; margin-top: 1.25rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  th { text-align: left; color: #64748b; padding: 0.35rem 0.5rem; white-space: nowrap;
        border-bottom: 1px solid #2d3748; font-weight: 500; }
-  td { padding: 0.35rem 0.5rem; border-bottom: 1px solid #1a2032; }
+  td { padding: 0.35rem 0.5rem; border-bottom: 1px solid #1a2032; white-space: nowrap; }
   tr:last-child td { border-bottom: none; }
   td.num { text-align: right; font-variant-numeric: tabular-nums; }
   canvas { max-height: 260px; }
@@ -92,10 +95,10 @@
 
   <!-- Tables -->
   <div class="charts">
-    <div class="chart-card"><h2>Per-Repo Breakdown</h2><table id="tRepos"></table></div>
-    <div class="chart-card"><h2>Top PRs by Churn</h2><table id="tTopPRs"></table></div>
-    <div class="chart-card"><h2>Cycle Time (days open before merge)</h2><table id="tCycle"></table></div>
-    <div class="chart-card"><h2>Review Decisions Submitted</h2><table id="tReviews"></table></div>
+    <div class="chart-card"><h2>Per-Repo Breakdown</h2><div class="tw"><table id="tRepos"></table></div></div>
+    <div class="chart-card"><h2>Top PRs by Churn</h2><div class="tw"><table id="tTopPRs"></table></div></div>
+    <div class="chart-card"><h2>Cycle Time (days open before merge)</h2><div class="tw"><table id="tCycle"></table></div></div>
+    <div class="chart-card"><h2>Review Decisions Submitted</h2><div class="tw"><table id="tReviews"></table></div></div>
   </div>
 </div>
 
