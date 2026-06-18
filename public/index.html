@@ -8,12 +8,15 @@
 <script src="https://cdn.jsdelivr.net/npm/sql.js@1.11.0/dist/sql-wasm.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { max-width: 100%; overflow-x: hidden; }
   body { font-family: system-ui, sans-serif; background: #0f1117; color: #e2e8f0;
          padding: 1.5rem; }
   h1  { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.25rem; }
   .subtitle { color: #94a3b8; font-size: 0.85rem; margin-bottom: 2rem; }
+  /* min(track, 100%) keeps the min column from exceeding the viewport on phones,
+     so cards stay full-width with even gutters instead of overflowing right. */
   .grid { display: grid; gap: 1.25rem;
-          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+          grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); }
   .card { background: #1e2330; border-radius: 10px; padding: 1.25rem; }
   .card h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: .06em;
              color: #64748b; margin-bottom: 0.75rem; }
@@ -23,7 +26,7 @@
   .chart-card h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: .06em;
                    color: #64748b; margin-bottom: 0.75rem; }
   .charts { display: grid; gap: 1.25rem;
-            grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(min(460px, 100%), 1fr));
             margin-top: 1.25rem; }
   table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 1.25rem; }
   th { text-align: left; color: #64748b; padding: 0.35rem 0.5rem;
@@ -36,6 +39,13 @@
   #status.err { color: #f87171; }
   #app { display: none; }
   code { background: #0b0e14; padding: .1rem .35rem; border-radius: 4px; color: #cbd5e1; }
+  @media (max-width: 540px) {
+    body { padding: 1rem; }
+    .grid, .charts { gap: 1rem; }
+    .card, .chart-card { padding: 1rem; }
+    .subtitle { margin-bottom: 1.25rem; }
+    .stat-big { font-size: 2rem; }
+  }
 </style>
 </head>
 <body>
