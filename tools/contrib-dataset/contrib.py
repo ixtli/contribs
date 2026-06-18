@@ -399,34 +399,71 @@ def _sync_prs(gh, conn, repo, owner, name, authors, args):
 
 
 def _sync_comments(gh, conn, repo, owner, name, authors, args):
-    """Repo-wide issue + review comments authored by our authors (feedback given)."""
+    """Repo-wide issue + review comments authored by our authors (feedback given).
+
+    Big/monorepo comment endpoints cap deep pagination (HTTP 422 "pagination is
+    limited for this resource"). We page within a window sorted by `updated asc`;
+    when the cap is hit, we advance the `since` cursor to the newest comment seen
+    and resume from page 1 — so we never page too deep, yet still walk the whole
+    history. UPSERT-by-id makes the overlapping window boundary idempotent. A
+    genuinely unreadable endpoint (window never advances) is skipped, not fatal.
+    """
     given = 0
+
+    def handle(c, kind):
+        nonlocal given
+        if (c.get("user") or {}).get("login", "").lower() not in authors:
+            return
+        if kind == "issue_comment":
+            if not is_pr_comment(c):
+                return
+            num = pr_number_from_url(c.get("html_url", "").split("#")[0])
+            reply = None
+        else:
+            num = pr_number_from_url(c.get("pull_request_url", ""))
+            reply = c.get("in_reply_to_id")
+        upsert(conn, "comments", {
+            "kind": kind, "id": c["id"], "repo": repo, "pr_number": num,
+            "author": c["user"]["login"], "target_author": None,
+            "direction": "given", "state": None,
+            "in_reply_to": reply,
+            "created_at": c.get("created_at"), "updated_at": c.get("updated_at"),
+            "url": c.get("html_url"),
+        }, ["kind", "id"])
+        given += 1
+
     for endpoint, kind in (("issues/comments", "issue_comment"),
                            ("pulls/comments", "review_comment")):
-        since = get_since(conn, repo, f"comments:{kind}", args.since)
-        params = {"since": _iso(since), "sort": "updated", "direction": "asc"}
-        newest = since
-        for c in gh.paginate(f"repos/{repo}/{endpoint}", params):
-            newest = max(newest or "", c.get("updated_at") or "")
-            if (c.get("user") or {}).get("login", "").lower() not in authors:
+        cursor = _iso(get_since(conn, repo, f"comments:{kind}", args.since))
+        newest = cursor
+        while True:
+            window_newest = cursor
+            capped = False
+            page = 1
+            try:
+                while True:
+                    batch = gh.get(f"repos/{repo}/{endpoint}",
+                                   {"since": cursor, "sort": "updated",
+                                    "direction": "asc", "per_page": 100, "page": page})
+                    if not isinstance(batch, list):
+                        raise RuntimeError(
+                            f"expected list from {endpoint}, got {type(batch)}")
+                    for c in batch:
+                        u = c.get("updated_at") or ""
+                        if u > window_newest:
+                            window_newest = u
+                        if u > newest:
+                            newest = u
+                        handle(c, kind)
+                    if len(batch) < 100:
+                        break
+                    page += 1
+            except Inaccessible:
+                capped = True
+            if capped and window_newest > cursor:
+                cursor = window_newest      # slide window forward; depth resets
                 continue
-            if kind == "issue_comment":
-                if not is_pr_comment(c):
-                    continue
-                num = pr_number_from_url(c.get("html_url", "").split("#")[0])
-                reply = None
-            else:
-                num = pr_number_from_url(c.get("pull_request_url", ""))
-                reply = c.get("in_reply_to_id")
-            upsert(conn, "comments", {
-                "kind": kind, "id": c["id"], "repo": repo, "pr_number": num,
-                "author": c["user"]["login"], "target_author": None,
-                "direction": "given", "state": None,
-                "in_reply_to": reply,
-                "created_at": c.get("created_at"), "updated_at": c.get("updated_at"),
-                "url": c.get("html_url"),
-            }, ["kind", "id"])
-            given += 1
+            break
         if newest:
             set_since(conn, repo, f"comments:{kind}", newest[:10])
     print(f"  comments (given): upserted {given}")

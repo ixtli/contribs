@@ -9,6 +9,10 @@
 out/
 sync.log
 
+# Python bytecode
+__pycache__/
+*.pyc
+
 # Never commit credentials
 *.token
 .env
